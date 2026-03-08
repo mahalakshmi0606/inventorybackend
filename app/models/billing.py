@@ -14,6 +14,7 @@ class Bill(db.Model):
     customer_email = db.Column(db.String(100))
     customer_gst = db.Column(db.String(50))
     customer_address = db.Column(db.String(200))
+    customer_type = db.Column(db.String(50), default='regular')  # regular, wholesale, vip, corporate
     
     # Bill Summary
     subtotal = db.Column(db.Float, default=0)
@@ -88,7 +89,8 @@ class Bill(db.Model):
                 'phone': self.customer_phone,
                 'email': self.customer_email,
                 'gst': self.customer_gst,
-                'address': self.customer_address
+                'address': self.customer_address,
+                'type': self.customer_type
             },
             'summary': {
                 'subtotal': round(self.subtotal, 2),

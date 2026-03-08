@@ -17,17 +17,11 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
 
-    # Enable CORS for React frontend
+    # Enable CORS
     CORS(
         app,
         supports_credentials=True,
-        origins=[
-            "http://localhost:3000",
-            "http://127.0.0.1:3000"
-        ],
-        allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
-        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        expose_headers=["Content-Type", "Authorization"]
+        resources={r"/api/*": {"origins": "*"}}
     )
 
     # Import models so Flask-Migrate detects them
@@ -39,12 +33,10 @@ def create_app():
     from app.routes.billing_routes import billing_bp
     from app.routes.supplier_routes import supplier_bp
 
-
     app.register_blueprint(login_bp, url_prefix="/api")
     app.register_blueprint(product_bp, url_prefix="/api")
     app.register_blueprint(billing_bp, url_prefix="/api")
     app.register_blueprint(supplier_bp)
-   
 
     # Health Check Route
     @app.route('/api/health', methods=['GET'])

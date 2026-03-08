@@ -1,8 +1,8 @@
 """empty message
 
-Revision ID: 906af96039a3
+Revision ID: 3392e91de249
 Revises: 
-Create Date: 2026-02-26 10:50:17.395948
+Create Date: 2026-03-04 12:56:46.035658
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '906af96039a3'
+revision = '3392e91de249'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -21,7 +21,7 @@ def upgrade():
     op.create_table('bills',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('bill_number', sa.String(length=50), nullable=False),
-    sa.Column('customer_name', sa.String(length=100), nullable=True),
+    sa.Column('customer_name', sa.String(length=100), nullable=False),
     sa.Column('customer_phone', sa.String(length=20), nullable=True),
     sa.Column('customer_email', sa.String(length=100), nullable=True),
     sa.Column('customer_gst', sa.String(length=50), nullable=True),
@@ -29,19 +29,16 @@ def upgrade():
     sa.Column('subtotal', sa.Float(), nullable=True),
     sa.Column('discount', sa.Float(), nullable=True),
     sa.Column('discount_type', sa.String(length=20), nullable=True),
-    sa.Column('discount_amount', sa.Float(), nullable=True),
     sa.Column('tax', sa.Float(), nullable=True),
     sa.Column('tax_type', sa.String(length=20), nullable=True),
-    sa.Column('tax_amount', sa.Float(), nullable=True),
     sa.Column('total', sa.Float(), nullable=True),
     sa.Column('paid_amount', sa.Float(), nullable=True),
     sa.Column('change_amount', sa.Float(), nullable=True),
-    sa.Column('due_amount', sa.Float(), nullable=True),
     sa.Column('payment_method', sa.String(length=50), nullable=True),
     sa.Column('payment_status', sa.String(length=20), nullable=True),
-    sa.Column('payment_details', sa.JSON(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.Column('created_by', sa.Integer(), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('bill_number')
     )
@@ -73,11 +70,11 @@ def upgrade():
     sa.Column('product_id', sa.Integer(), nullable=False),
     sa.Column('product_name', sa.String(length=100), nullable=False),
     sa.Column('product_model', sa.String(length=100), nullable=True),
-    sa.Column('product_type', sa.String(length=50), nullable=True),
+    sa.Column('product_type', sa.String(length=100), nullable=True),
     sa.Column('sell_price', sa.Float(), nullable=False),
     sa.Column('quantity', sa.Integer(), nullable=False),
     sa.Column('total', sa.Float(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('item_status', sa.String(length=20), nullable=False),
     sa.ForeignKeyConstraint(['bill_id'], ['bills.id'], ),
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -85,17 +82,10 @@ def upgrade():
     op.create_table('payments',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('bill_id', sa.Integer(), nullable=False),
-    sa.Column('payment_id', sa.String(length=50), nullable=False),
+    sa.Column('payment_id', sa.String(length=100), nullable=True),
     sa.Column('amount', sa.Float(), nullable=False),
     sa.Column('method', sa.String(length=50), nullable=False),
     sa.Column('status', sa.String(length=20), nullable=True),
-    sa.Column('card_number', sa.String(length=20), nullable=True),
-    sa.Column('card_holder_name', sa.String(length=100), nullable=True),
-    sa.Column('upi_id', sa.String(length=100), nullable=True),
-    sa.Column('transaction_id', sa.String(length=100), nullable=True),
-    sa.Column('bank_name', sa.String(length=100), nullable=True),
-    sa.Column('cheque_number', sa.String(length=50), nullable=True),
-    sa.Column('cash_received', sa.Float(), nullable=True),
     sa.Column('reference', sa.String(length=100), nullable=True),
     sa.Column('notes', sa.Text(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=True),
@@ -103,11 +93,41 @@ def upgrade():
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('payment_id')
     )
+    op.create_table('suppliers',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('company', sa.String(length=100), nullable=False),
+    sa.Column('email', sa.String(length=100), nullable=True),
+    sa.Column('phone', sa.String(length=20), nullable=True),
+    sa.Column('address', sa.Text(), nullable=True),
+    sa.Column('created_by', sa.Integer(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['created_by'], ['login.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('items',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('type', sa.String(length=50), nullable=True),
+    sa.Column('model', sa.String(length=100), nullable=False),
+    sa.Column('watts', sa.Float(), nullable=True),
+    sa.Column('buy_price', sa.Float(), nullable=False),
+    sa.Column('supplier_id', sa.Integer(), nullable=False),
+    sa.Column('status', sa.String(length=50), nullable=True),
+    sa.Column('attachment', sa.String(length=255), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['supplier_id'], ['suppliers.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
     # ### end Alembic commands ###
 
 
 def downgrade():
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_table('items')
+    op.drop_table('suppliers')
     op.drop_table('payments')
     op.drop_table('bill_items')
     op.drop_table('products')

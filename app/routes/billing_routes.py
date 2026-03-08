@@ -3,7 +3,6 @@ from flask import Blueprint, request, jsonify, make_response
 from app.models.billing import Bill, BillItem, Payment
 from app.models.product import Product
 from app import db
-from flask_cors import CORS
 from sqlalchemy import or_, and_, func
 from datetime import datetime, timedelta
 import traceback
@@ -11,31 +10,6 @@ import random
 import string
 
 billing_bp = Blueprint("billing_bp", __name__)
-
-# Configure CORS for this blueprint with credentials support
-CORS(billing_bp, 
-     supports_credentials=True,
-     origins=["http://localhost:3000", "http://127.0.0.1:3000"])
-
-# Add after_request handler to ensure CORS headers are set properly
-@billing_bp.after_request
-def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
-
-# Generic OPTIONS handler for all routes in this blueprint
-@billing_bp.route('/<path:path>', methods=['OPTIONS'])
-def handle_all_options(path):
-    """Handle OPTIONS requests for any route in this blueprint"""
-    response = make_response()
-    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
 
 def generate_unique_bill_number():
     """Generate a unique random bill number"""
@@ -149,6 +123,7 @@ def create_bill():
         bill.customer_email = data.get('customerEmail', '')
         bill.customer_gst = data.get('customerGST', '')
         bill.customer_address = data.get('customerAddress', '')
+        bill.customer_type = data.get('customerType', 'regular')  # Added customer_type field
         
         # Discount and tax settings
         bill.discount = float(data.get('discount', 0))
@@ -263,6 +238,7 @@ def get_bills_with_pending_items():
                 'billNumber': bill.bill_number,
                 'customerName': bill.customer_name,
                 'customerPhone': bill.customer_phone,
+                'customerType': bill.customer_type,  # Added customer_type field
                 'total': round(bill.total, 2),
                 'paidAmount': round(bill.paid_amount, 2),
                 'pendingItems': pending_count,
@@ -308,6 +284,7 @@ def get_pending_bill_items(bill_id):
             'success': True,
             'bill_id': bill_id,
             'bill_number': bill.bill_number,
+            'customer_type': bill.customer_type,  # Added customer_type field
             'items': items
         }), 200
         
@@ -398,6 +375,7 @@ def get_all_bills():
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
         customer = request.args.get('customer')
+        customer_type = request.args.get('customer_type')  # Added customer_type filter
         payment_method = request.args.get('payment_method')
         payment_status = request.args.get('payment_status')
         
@@ -410,6 +388,8 @@ def get_all_bills():
             query = query.filter(Bill.created_at <= datetime.fromisoformat(end_date))
         if customer:
             query = query.filter(Bill.customer_name.ilike(f'%{customer}%'))
+        if customer_type:  # Added customer_type filter
+            query = query.filter(Bill.customer_type == customer_type)
         if payment_method:
             query = query.filter(Bill.payment_method == payment_method)
         if payment_status:
@@ -435,6 +415,7 @@ def get_all_bills():
                 'billNumber': bill.bill_number,
                 'customerName': bill.customer_name,
                 'customerPhone': bill.customer_phone,
+                'customerType': bill.customer_type,  # Added customer_type field
                 'subtotal': round(bill.subtotal, 2),
                 'discount': round(bill.discount, 2),
                 'tax': round(bill.tax, 2),
@@ -643,6 +624,13 @@ def get_billing_statistics():
             func.sum(Bill.total).label('total')
         ).group_by(Bill.payment_method).all()
         
+        # Customer type distribution - NEW
+        customer_types = db.session.query(
+            Bill.customer_type,
+            func.count(Bill.id).label('count'),
+            func.sum(Bill.total).label('total')
+        ).group_by(Bill.customer_type).all()
+        
         # Recent bills
         recent_bills = Bill.query.order_by(Bill.created_at.desc()).limit(5).all()
         
@@ -666,10 +654,16 @@ def get_billing_statistics():
                 'count': pm[1],
                 'total': round(pm[2] or 0, 2)
             } for pm in payment_methods],
+            'customerTypes': [{  # New customer type statistics
+                'type': ct[0] or 'regular',
+                'count': ct[1],
+                'total': round(ct[2] or 0, 2)
+            } for ct in customer_types],
             'recentBills': [{
                 'id': b.id,
                 'billNumber': b.bill_number,
                 'customerName': b.customer_name,
+                'customerType': b.customer_type,  # Added customer_type field
                 'total': round(b.total, 2),
                 'createdAt': b.created_at.isoformat()
             } for b in recent_bills]
@@ -715,3 +709,44 @@ def void_bill_item(bill_id, item_id):
         db.session.rollback()
         print(f"Void item error: {str(e)}")
         return jsonify({"error": str(e)}), 400
+
+
+# ------------------ GET CUSTOMER TYPE SUMMARY ------------------
+@billing_bp.route("/billing/customer-types/summary", methods=["GET"])
+def get_customer_type_summary():
+    """Get summary of bills by customer type"""
+    try:
+        # Date range parameters
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        # Build query
+        query = db.session.query(
+            Bill.customer_type,
+            func.count(Bill.id).label('bill_count'),
+            func.sum(Bill.total).label('total_sales'),
+            func.avg(Bill.total).label('avg_bill_value')
+        ).group_by(Bill.customer_type)
+        
+        if start_date:
+            query = query.filter(Bill.created_at >= datetime.fromisoformat(start_date))
+        if end_date:
+            query = query.filter(Bill.created_at <= datetime.fromisoformat(end_date))
+        
+        results = query.all()
+        
+        summary = [{
+            'customerType': r[0] or 'regular',
+            'billCount': r[1],
+            'totalSales': round(r[2] or 0, 2),
+            'averageBillValue': round(r[3] or 0, 2)
+        } for r in results]
+        
+        return jsonify({
+            'success': True,
+            'summary': summary
+        }), 200
+        
+    except Exception as e:
+        print(f"Customer type summary error: {str(e)}")
+        return jsonify({"error": "Failed to fetch customer type summary"}), 400

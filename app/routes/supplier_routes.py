@@ -2,18 +2,12 @@ from flask import Blueprint, request, jsonify, make_response, send_from_director
 from app import db
 from app.models.supplier import Supplier, Item
 from datetime import datetime
-from flask_cors import CORS
 import traceback
 import os
 from werkzeug.utils import secure_filename
 import uuid
 
 supplier_bp = Blueprint('supplier', __name__)
-
-# Configure CORS for this blueprint with credentials support
-CORS(supplier_bp, 
-     supports_credentials=True,
-     origins=["http://localhost:3000", "http://127.0.0.1:3000"])
 
 # File upload configuration - Use absolute path
 # Get the directory where this file is located
@@ -39,28 +33,6 @@ print("=" * 60)
 def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-# Add after_request handler to ensure CORS headers are set properly
-@supplier_bp.after_request
-def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    response.headers.add('Access-Control-Max-Age', '3600')
-    return response
-
-# Generic OPTIONS handler for all routes in this blueprint
-@supplier_bp.route('/<path:path>', methods=['OPTIONS'])
-def handle_all_options(path):
-    """Handle OPTIONS requests for any route in this blueprint"""
-    response = make_response()
-    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    response.headers.add('Access-Control-Max-Age', '3600')
-    return response
 
 # ==================== FILE UPLOAD ROUTES ====================
 
