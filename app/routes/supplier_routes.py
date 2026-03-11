@@ -602,7 +602,7 @@ def create_item(supplier_id):
             print("Error: Buy price is required")
             return jsonify({"error": "Buy price is required"}), 400
         
-        # Create new item with status and attachment
+        # Create new item with status, attachment, and quantity
         new_item = Item(
             name=data['name'].strip(),
             type=data.get('type', '').strip() if data.get('type') else None,
@@ -611,10 +611,11 @@ def create_item(supplier_id):
             buy_price=float(data['buy_price']),
             supplier_id=supplier_id,
             status=data.get('status', 'Active'),
-            attachment=data.get('attachment', None)
+            attachment=data.get('attachment', None),
+            quantity=int(data.get('quantity', 0))  # ✅ FIXED: Include quantity
         )
         
-        print(f"Creating item: {new_item.name}, price: {new_item.buy_price}, status: {new_item.status}, attachment: {new_item.attachment}")
+        print(f"Creating item: {new_item.name}, price: {new_item.buy_price}, status: {new_item.status}, quantity: {new_item.quantity}, attachment: {new_item.attachment}")
         
         db.session.add(new_item)
         db.session.commit()
@@ -667,11 +668,13 @@ def update_item(item_id):
             item.status = data['status']
         if 'attachment' in data:
             item.attachment = data['attachment']
+        if 'quantity' in data:  # ✅ FIXED: Include quantity
+            item.quantity = int(data['quantity']) if data['quantity'] else 0
         
         item.updated_at = datetime.utcnow()
         db.session.commit()
         
-        print(f"✅ Item {item_id} updated successfully")
+        print(f"✅ Item {item_id} updated successfully. New quantity: {item.quantity}")
         
         return jsonify({
             'success': True,
@@ -757,6 +760,169 @@ def get_suppliers_with_items():
         print(f"Get suppliers with items error: {str(e)}")
         print(traceback.format_exc())
         return jsonify({"error": "Failed to fetch suppliers with items"}), 400
+
+# Bulk create items
+@supplier_bp.route("/api/items/bulk", methods=["POST", "OPTIONS"])
+def bulk_create_items():
+    """Create multiple items at once"""
+    try:
+        if request.method == 'OPTIONS':
+            response = make_response()
+            return response
+            
+        print("📦 POST /api/items/bulk called")
+        
+        if not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 400
+        
+        data = request.get_json()
+        print(f"Bulk create data: {data}")
+        
+        items_data = data.get('items', [])
+        supplier_id = data.get('supplier_id')
+        
+        if not supplier_id:
+            return jsonify({"error": "supplier_id is required"}), 400
+        
+        # Verify supplier exists
+        supplier = Supplier.query.get(supplier_id)
+        if not supplier:
+            return jsonify({"error": f"Supplier {supplier_id} not found"}), 404
+        
+        if not items_data:
+            return jsonify({"error": "No items data provided"}), 400
+        
+        created_items = []
+        errors = []
+        
+        for idx, item_data in enumerate(items_data):
+            try:
+                # Validate required fields
+                if not item_data.get('name'):
+                    errors.append(f"Item {idx + 1}: Name is required")
+                    continue
+                if not item_data.get('model'):
+                    errors.append(f"Item {idx + 1}: Model is required")
+                    continue
+                if item_data.get('buy_price') is None:
+                    errors.append(f"Item {idx + 1}: Buy price is required")
+                    continue
+                
+                # Create item
+                new_item = Item(
+                    name=item_data['name'].strip(),
+                    type=item_data.get('type', '').strip() if item_data.get('type') else None,
+                    model=item_data['model'].strip(),
+                    watts=float(item_data.get('watts', 0)),
+                    buy_price=float(item_data['buy_price']),
+                    supplier_id=supplier_id,
+                    status=item_data.get('status', 'Active'),
+                    attachment=item_data.get('attachment', None),
+                    quantity=int(item_data.get('quantity', 0))  # ✅ FIXED: Include quantity
+                )
+                
+                db.session.add(new_item)
+                created_items.append(new_item)
+                
+            except Exception as e:
+                errors.append(f"Item {idx + 1}: {str(e)}")
+        
+        if created_items:
+            db.session.commit()
+            print(f"✅ {len(created_items)} items created successfully")
+        
+        return jsonify({
+            'success': len(errors) == 0,
+            'message': f'Created {len(created_items)} items' + (f' with {len(errors)} errors' if errors else ''),
+            'items_created': len(created_items),
+            'items': [item.to_dict() for item in created_items],
+            'errors': errors if errors else None
+        }), 201 if created_items else 400
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Bulk create error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 400
+
+# Bulk update items
+@supplier_bp.route("/api/items/bulk-update", methods=["POST", "OPTIONS"])
+def bulk_update_items():
+    """Update multiple items at once"""
+    try:
+        if request.method == 'OPTIONS':
+            response = make_response()
+            return response
+            
+        print("📦 POST /api/items/bulk-update called")
+        
+        if not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 400
+        
+        data = request.get_json()
+        print(f"Bulk update data: {data}")
+        
+        items_data = data.get('items', [])
+        
+        if not items_data:
+            return jsonify({"error": "No items data provided"}), 400
+        
+        updated_items = []
+        errors = []
+        
+        for item_data in items_data:
+            try:
+                item_id = item_data.get('id')
+                if not item_id:
+                    errors.append("Item ID is required for update")
+                    continue
+                
+                item = Item.query.get(item_id)
+                if not item:
+                    errors.append(f"Item {item_id} not found")
+                    continue
+                
+                # Update fields
+                if 'name' in item_data:
+                    item.name = item_data['name'].strip()
+                if 'type' in item_data:
+                    item.type = item_data['type'].strip() if item_data['type'] else None
+                if 'model' in item_data:
+                    item.model = item_data['model'].strip()
+                if 'watts' in item_data:
+                    item.watts = float(item_data['watts']) if item_data['watts'] else 0
+                if 'buy_price' in item_data:
+                    item.buy_price = float(item_data['buy_price']) if item_data['buy_price'] else 0
+                if 'status' in item_data:
+                    item.status = item_data['status']
+                if 'attachment' in item_data:
+                    item.attachment = item_data['attachment']
+                if 'quantity' in item_data:  # ✅ FIXED: Include quantity
+                    item.quantity = int(item_data['quantity']) if item_data['quantity'] else 0
+                
+                item.updated_at = datetime.utcnow()
+                updated_items.append(item)
+                
+            except Exception as e:
+                errors.append(f"Item {item_id if 'id' in item_data else 'unknown'}: {str(e)}")
+        
+        if updated_items:
+            db.session.commit()
+            print(f"✅ {len(updated_items)} items updated successfully")
+        
+        return jsonify({
+            'success': len(errors) == 0,
+            'message': f'Updated {len(updated_items)} items' + (f' with {len(errors)} errors' if errors else ''),
+            'items_updated': len(updated_items),
+            'items': [item.to_dict() for item in updated_items],
+            'errors': errors if errors else None
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Bulk update error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 400
 
 # Delete multiple suppliers
 @supplier_bp.route("/api/suppliers/bulk-delete", methods=["POST", "OPTIONS"])
