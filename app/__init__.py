@@ -34,6 +34,7 @@ def create_app():
     from app.routes.supplier_routes import supplier_bp
     from app.routes.quotation_routes import quotation_bp
     from app.routes.invoice_routes import invoice_bp
+    from app.routes.service_routes import service_bp
 
     app.register_blueprint(login_bp, url_prefix="/api")
     app.register_blueprint(product_bp, url_prefix="/api")
@@ -41,6 +42,7 @@ def create_app():
     app.register_blueprint(supplier_bp)
     app.register_blueprint(quotation_bp, url_prefix='/api')
     app.register_blueprint(invoice_bp, url_prefix='/api')
+    app.register_blueprint(service_bp)
 
     # Health Check Route
     @app.route('/api/health', methods=['GET'])
